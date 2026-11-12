@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: g11.festify.FestifyApplicationTests
--------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.945 s -- in g11.festify.FestifyApplicationTests

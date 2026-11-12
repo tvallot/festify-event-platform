@@ -1,7 +1,0 @@
-package g11.festify.exceptions;
-
-public class ResourceNotFoundException extends RuntimeException {
-    public ResourceNotFoundException(String message) {
-        super(message);
-    }
-}

@@ -1,6 +1,15 @@
-# ignore IDE files
+# Environment
+.env
+
+# IDE / editors
 .idea/
 .vscode/
+*.iml
+.DS_Store
 
-# ignore environment variables
-.env
+# AI assistants
+.claude/
+.codex/
+.cursor/
+CLAUDE.md
+AGENTS.md
