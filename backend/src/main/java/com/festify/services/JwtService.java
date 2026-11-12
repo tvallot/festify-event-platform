@@ -22,13 +22,13 @@ public class JwtService {
     @Value("${jwt.expiration}")
     private long expiration;
 
-    /** Retourne la clé secrète configurée pour signer les tokens. */
+    /** Builds the HMAC signing key from the Base64 secret. */
     private SecretKey getSigningKey() {
         byte[] keyBytes = Decoders.BASE64.decode(secret);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    /** Crée un token JWT contenant l'email, l'ID et le rôle de l'utilisateur. */
+    /** Creates a signed JWT holding the user email (subject), id and role. */
     public String generateToken(User user) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
@@ -43,23 +43,21 @@ public class JwtService {
                 .compact();
     }
 
-    /** Récupère l'email stocké dans le token JWT. */
     public String extractEmail(String token) {
         return extractAllClaims(token).getSubject();
     }
 
-    /** Vérifie la correspondance de l'email et la validité temporelle du token. */
+    /** A token is valid if it belongs to this user and has not expired. */
     public boolean isTokenValid(String token, User user) {
         String email = extractEmail(token);
         return email.equals(user.getEmail()) && !isTokenExpired(token);
     }
 
-    /** Vérifie si la date d'expiration du token est dépassée. */
     private boolean isTokenExpired(String token) {
         return extractAllClaims(token).getExpiration().before(new Date());
     }
 
-    /** Décrypte et extrait toutes les données (claims) du token. */
+    /** Verifies the signature and returns the token claims. */
     private Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())

@@ -6,11 +6,10 @@ import org.springframework.http.MediaType;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-// Tests pour les routes de participation aux events (join/leave/participants)
-// On vérifie les règles : capacité max, droits du créateur, accès public
+// Integration tests for joining and leaving events
+// Covers capacity limits, creator rules and public access to the participant list
 public class ParticipationIntegrationTest extends BaseIntegrationTest {
 
-    // JSON pour créer un event normal avec une grande capacité
     private static final String EVENT_JSON = """
             {
                 "title": "Participation Event",
@@ -25,7 +24,7 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
             }
             """;
 
-    // JSON pour créer un event avec capacité = 1 (sera plein dès la création car le créateur compte)
+    // Capacity 1: the event is already full because the creator counts as a participant
     private static final String FULL_EVENT_JSON = """
             {
                 "title": "Full Event",
@@ -55,7 +54,6 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
         }
         """;
 
-    // Méthode helper : crée un event et retourne son ID
     private String createEventAndGetId(String token, String eventJson) throws Exception {
         String response = mockMvc.perform(post("/api/events")
                         .header("Authorization", "Bearer " + token)
@@ -69,7 +67,6 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
         return response.split("\"id\":")[1].split(",")[0].trim();
     }
 
-    // Un utilisateur connecté peut rejoindre un event : on crée un user, un event, puis on rejoint
     @Test
     void join_event_should_work_with_token() throws Exception {
         String creatorToken = registerAndGetToken("Creator", "Join", "creator.join@test.com", "123456");
@@ -82,7 +79,6 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
                 .andExpect(content().string("Registration successful"));
     }
 
-    // Sécurité : sans token, on ne peut pas s'inscrire à un event
     @Test
     void join_event_without_token_should_fail() throws Exception {
         String creatorToken = registerAndGetToken("Creator", "NoToken", "creator.notoken@test.com", "123456");
@@ -92,10 +88,8 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
-    // La capacité max doit être respectée : le créateur compte déjà comme 1, capacité = 1 donc plein
     @Test
     void join_full_event_should_fail() throws Exception {
-        // Le créateur compte déjà comme 1 participant, capacité = 1 donc plein
         String creatorToken = registerAndGetToken("Creator", "Full", "creator.full@test.com", "123456");
         String joinerToken = registerAndGetToken("Joiner", "Full", "joiner.full@test.com", "123456");
         String eventId = createEventAndGetId(creatorToken, FULL_EVENT_JSON);
@@ -106,7 +100,6 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
                 .andExpect(content().string("Event full"));
     }
 
-    // On rejoint d'abord l'event, puis on le quitte : les deux actions doivent fonctionner
     @Test
     void leave_event_should_work() throws Exception {
         String creatorToken = registerAndGetToken("Creator", "Leave", "creator.leave@test.com", "123456");
@@ -123,7 +116,6 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
                 .andExpect(content().string("Left event successfully"));
     }
 
-    // Règle métier : le créateur est lié à son event, il ne peut pas le quitter
     @Test
     void creator_cannot_leave_event() throws Exception {
         String creatorToken = registerAndGetToken("Creator", "Cannot", "creator.cannot@test.com", "123456");
@@ -135,7 +127,6 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
                 .andExpect(content().string("Creator cannot leave their own event"));
     }
 
-    // On ne peut pas quitter un event auquel on n'est pas inscrit : l'API doit retourner 404
     @Test
     void leave_event_not_joined_should_fail() throws Exception {
         String creatorToken = registerAndGetToken("Creator", "NotJoined", "creator.notjoined@test.com", "123456");
@@ -147,14 +138,15 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // La liste des participants est publique : accessible sans être connecté
     @Test
     void get_participants_should_be_public() throws Exception {
         String creatorToken = registerAndGetToken("Creator", "Public", "creator.public@test.com", "123456");
         String eventId = createEventAndGetId(creatorToken, EVENT_JSON);
 
         mockMvc.perform(get("/api/events/" + eventId + "/participants"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].user.email").value("creator.public@test.com"))
+                .andExpect(jsonPath("$[0].user.passwordHash").doesNotExist());
     }
 
     @Test

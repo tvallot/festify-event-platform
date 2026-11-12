@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.mindrot.jbcrypt.BCrypt;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.festify.dto.LoginResponse;
 import com.festify.dto.ProfileEventsResponse;
@@ -19,80 +19,80 @@ import com.festify.models.Participation;
 import com.festify.models.User;
 import com.festify.repositories.ParticipationRepository;
 import com.festify.repositories.UserRepository;
-import jakarta.transaction.Transactional;
 
 @Service
 public class UserService {
 
-    @Autowired
-    private UserRepository userRepository;
+    private static final int AVATAR_COUNT = 6;
 
-    @Autowired
-    private JwtService jwtService;
+    private final UserRepository userRepository;
+    private final JwtService jwtService;
+    private final ParticipationRepository participationRepository;
 
-    @Autowired
-    private ParticipationRepository participationRepository;
+    public UserService(UserRepository userRepository,
+                       JwtService jwtService,
+                       ParticipationRepository participationRepository) {
+        this.userRepository = userRepository;
+        this.jwtService = jwtService;
+        this.participationRepository = participationRepository;
+    }
 
-    /** Gère l'inscription : hash du mot de passe, avatar par défaut et génération du JWT. */
+    /** Registers a new user: hashes the password, picks a default avatar and returns a JWT. */
     public LoginResponse registerUser(User user) {
+        if (user.getEmail() == null || user.getPassword() == null || user.getPassword().isBlank()) {
+            throw new IllegalArgumentException("Email and password are required");
+        }
         if (userRepository.findByEmail(user.getEmail()).isPresent()) {
-            throw new UserAlreadyExistsException("Email already exists"); 
+            throw new UserAlreadyExistsException("Email already exists");
         }
 
         user.setPasswordHash(BCrypt.hashpw(user.getPassword(), BCrypt.gensalt()));
-        
+        user.setPassword(null);
+        user.setRole("USER");
+
         if (user.getProfilePicture() == null) {
-            int randomNumber = ThreadLocalRandom.current().nextInt(1, 7);
-            user.setProfilePicture(String.valueOf(randomNumber));
+            int avatar = ThreadLocalRandom.current().nextInt(1, AVATAR_COUNT + 1);
+            user.setProfilePicture(String.valueOf(avatar));
         }
 
         User savedUser = userRepository.save(user);
         String token = jwtService.generateToken(savedUser);
 
-        return new LoginResponse(
-                token,
-                savedUser.getId(),
-                savedUser.getEmail(),
-                savedUser.getRole()
-        );
+        return new LoginResponse(token, savedUser.getId(), savedUser.getEmail(), savedUser.getRole());
     }
 
-    /** Recherche un utilisateur par son identifiant. */
+    /** Checks the credentials and returns a login response with a fresh JWT. */
+    public LoginResponse loginUser(String email, String password) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
+
+        if (password == null || !BCrypt.checkpw(password, user.getPasswordHash())) {
+            throw new InvalidCredentialsException("Invalid email or password");
+        }
+
+        String token = jwtService.generateToken(user);
+        return new LoginResponse(token, user.getId(), user.getEmail(), user.getRole());
+    }
+
     public User getUserById(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with the id : " + id)); 
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
     }
 
-    /** Met à jour les champs renseignés du profil utilisateur. */
+    /** Updates the profile fields that are present in the request. */
     public User updateUser(Long id, User details) {
         User user = getUserById(id);
 
         if (details.getFirstName() != null) user.setFirstName(details.getFirstName());
-
         if (details.getLastName() != null) user.setLastName(details.getLastName());
-
         if (details.getBio() != null) user.setBio(details.getBio());
-
         if (details.getLocation() != null) user.setLocation(details.getLocation());
-
         if (details.getProfilePicture() != null) user.setProfilePicture(details.getProfilePicture());
 
         return userRepository.save(user);
     }
 
-    /** Vérifie les identifiants et génère un token JWT en cas de succès. */
-    public String loginUser(String email, String password) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
-
-        if (!BCrypt.checkpw(password, user.getPasswordHash())) {
-            throw new InvalidCredentialsException("Invalid email or password");
-        }
-
-        return jwtService.generateToken(user);
-    }
-
-    /** Regroupe les événements d'un utilisateur par statut (créés, à venir, passés). */
+    /** Groups the user's events into created, upcoming and past. */
     public ProfileEventsResponse getProfileEvents(Long userId) {
         List<Participation> participations = participationRepository.findByUserId(userId);
 
@@ -121,7 +121,7 @@ public class UserService {
         return new ProfileEventsResponse(createdEvents, upcomingEvents, pastEvents);
     }
 
-    /** Supprime le compte utilisateur, ses participations et purge ses favoris. */
+    /** Deletes a user along with their participations and favorites. */
     @Transactional
     public void deleteUserAccount(Long userId) {
         User user = getUserById(userId);
@@ -130,8 +130,6 @@ public class UserService {
         userRepository.save(user);
 
         participationRepository.deleteByUserId(userId);
-
         userRepository.delete(user);
     }
-
 }

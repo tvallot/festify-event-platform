@@ -1,5 +1,6 @@
 package com.festify.controllers;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
@@ -30,29 +31,31 @@ public class ParticipationController {
         this.participationRepository = participationRepository;
     }
 
-    /** Inscrit l'utilisateur connecté à un événement s'il reste de la place. */
+    /** Registers the current user to an event if there is still room. */
     @PostMapping("/{eventId}/join")
     public ResponseEntity<String> joinEvent(@PathVariable Long eventId, Authentication authentication) {
         User currentUser = (User) authentication.getPrincipal();
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
-	if (event.getCapacity() != null && participationRepository.countByEventId(eventId) >= event.getCapacity()) {
+        if (event.getCapacity() != null && participationRepository.countByEventId(eventId) >= event.getCapacity()) {
             return ResponseEntity.badRequest().body("Event full");
         }
 
-        Participation p = new Participation();
-        p.setEvent(event);
-        p.setUser(currentUser);
-        participationRepository.save(p);
+        Participation participation = new Participation();
+        participation.setEvent(event);
+        participation.setUser(currentUser);
+        participation.setCreator(false);
+        participation.setOnWaitList(false);
+        participation.setRegistrationDate(LocalDate.now());
+        participationRepository.save(participation);
 
         return ResponseEntity.ok("Registration successful");
     }
 
-    /** Désinscrit l'utilisateur connecté d'un événement (impossible pour le créateur). */
+    /** Unregisters the current user from an event. The creator cannot leave their own event. */
     @DeleteMapping("/{eventId}/join")
     public ResponseEntity<String> leaveEvent(@PathVariable Long eventId, Authentication authentication) {
-
         User currentUser = (User) authentication.getPrincipal();
 
         Participation participation = participationRepository
@@ -64,11 +67,9 @@ public class ParticipationController {
         }
 
         participationRepository.delete(participation);
-
         return ResponseEntity.ok("Left event successfully");
     }
 
-    /** Liste tous les participants d'un événement donné. */
     @GetMapping("/{eventId}/participants")
     public List<Participation> getParticipants(@PathVariable Long eventId) {
         return participationRepository.findByEventId(eventId);

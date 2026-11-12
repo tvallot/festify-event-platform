@@ -1,8 +1,8 @@
 package com.festify;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,16 +10,78 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 
 import com.festify.models.User;
-import com.festify.repositories.UserRepository;
-
-
 
 public class UserIntegrationTest extends BaseIntegrationTest {
-    @Autowired
-    private UserRepository userRepository;
+
+    @Test
+    void register_should_ignore_role_sent_by_client() throws Exception {
+        String json = """
+        {
+            "firstName": "Sneaky",
+            "lastName": "User",
+            "email": "sneaky@test.com",
+            "password": "123456",
+            "role": "ADMIN"
+        }
+        """;
+
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("USER"));
+
+        assertEquals("USER", userRepository.findByEmail("sneaky@test.com").orElseThrow().getRole());
+    }
+
+    @Test
+    void password_should_be_hashed_and_never_returned() throws Exception {
+        String token = registerAndGetToken("Hash", "User", "hash@test.com", "123456");
+
+        User user = userRepository.findByEmail("hash@test.com").orElseThrow();
+        assertNull(user.getPassword());
+        assertTrue(user.getPasswordHash().startsWith("$2a$"));
+
+        mockMvc.perform(get("/api/users/profile")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+    }
+
+    @Test
+    void update_other_user_profile_should_fail() throws Exception {
+        String attackerToken = registerAndGetToken("Attacker", "User", "attacker@test.com", "123456");
+        registerUser("Victim", "User", "victim@test.com", "123456");
+        User victim = userRepository.findByEmail("victim@test.com").orElseThrow();
+
+        mockMvc.perform(put("/api/users/" + victim.getId())
+                        .header("Authorization", "Bearer " + attackerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"firstName\": \"Hacked\" }"))
+                .andExpect(status().isForbidden());
+
+        assertEquals("Victim", userRepository.findByEmail("victim@test.com").orElseThrow().getFirstName());
+    }
+
+    @Test
+    void admin_can_update_other_user_profile() throws Exception {
+        String adminToken = registerAdminAndGetToken("admin.update.user@test.com");
+        registerUser("Target", "User", "target.update@test.com", "123456");
+        User target = userRepository.findByEmail("target.update@test.com").orElseThrow();
+
+        mockMvc.perform(put("/api/users/" + target.getId())
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"firstName\": \"Renamed\" }"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstName").value("Renamed"));
+    }
 
     @Test
     void get_all_users_as_user_should_fail() throws Exception {

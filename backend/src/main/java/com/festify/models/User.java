@@ -1,16 +1,26 @@
 package com.festify.models;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.persistence.*;
-
-
 import java.util.HashSet;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+
 @Entity
 @Table(name = "users")
-public class User
-{
+public class User {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -21,17 +31,12 @@ public class User
     @Column(unique = true, nullable = false)
     private String email;
 
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
+    /** Plain password received on sign-up. Never stored, never returned. */
+    @Transient
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
+    @JsonIgnore
     private String passwordHash;
 
     @Column(length = 200)
@@ -39,6 +44,9 @@ public class User
 
     private String profilePicture;
     private String location;
+
+    /** Assigned server-side only: clients can read it but not set it. */
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private String role = "USER";
 
     @ManyToMany
@@ -47,7 +55,6 @@ public class User
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "event_id")
     )
-
     private Set<Event> favorites = new HashSet<>();
 
     public Long getId() {
@@ -82,20 +89,20 @@ public class User
         this.email = email;
     }
 
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
     public String getPasswordHash() {
         return passwordHash;
     }
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
-    }
-
-    public Set<Event> getFavorites() {
-        return favorites;
-    }
-
-    public void setFavorites(Set<Event> favorites) {
-        this.favorites = favorites;
     }
 
     public String getBio() {
@@ -128,5 +135,13 @@ public class User
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public Set<Event> getFavorites() {
+        return favorites;
+    }
+
+    public void setFavorites(Set<Event> favorites) {
+        this.favorites = favorites;
     }
 }

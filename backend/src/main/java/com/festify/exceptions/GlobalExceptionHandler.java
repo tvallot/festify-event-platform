@@ -46,7 +46,7 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
     }
 
-    // Gestion spécifique pour l'email déjà existant
+    // Sign-up with an email that is already taken
     @ExceptionHandler(UserAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleUserExists(UserAlreadyExistsException exception) {
         Map<String, String> response = new HashMap<>();
@@ -55,7 +55,7 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.CONFLICT);
     }
 
-    // Gestion spécifique pour les identifiants invalides
+    // Wrong email or password
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<Map<String, String>> handleInvalidCredentials(InvalidCredentialsException exception) {
         Map<String, String> response = new HashMap<>();
@@ -64,7 +64,7 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
     }
 
-    // Gestion de secours pour toutes les autres RuntimeException
+    // Fallback for any other runtime error
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException exception) {
         Map<String, String> response = new HashMap<>();

@@ -11,14 +11,29 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.festify.models.User;
+import com.festify.repositories.UserRepository;
+
 @SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("test") 
-@Transactional 
+@ActiveProfiles("test")
+@Transactional
 public abstract class BaseIntegrationTest {
 
     @Autowired
     protected MockMvc mockMvc;
+
+    @Autowired
+    protected UserRepository userRepository;
+
+    /** Roles cannot be set through the API, so test admins are promoted directly in the database. */
+    protected String registerAdminAndGetToken(String email) throws Exception {
+        registerUser("Admin", "User", email, "123456");
+        User admin = userRepository.findByEmail(email).orElseThrow();
+        admin.setRole("ADMIN");
+        userRepository.save(admin);
+        return loginAndGetToken(email, "123456");
+    }
 
     protected String extractToken(String response) {
         return response.split("\"token\":\"")[1].split("\"")[0];

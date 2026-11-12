@@ -2,7 +2,6 @@ package com.festify.controllers;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -29,50 +28,65 @@ import com.festify.services.UserService;
 @RequestMapping("/api/users")
 public class UserController {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
+    private final UserService userService;
+    private final EventRepository eventRepository;
 
-    @Autowired
-    private UserService userService;
-    @Autowired
-    private EventRepository eventRepository;
+    public UserController(UserRepository userRepository,
+                          UserService userService,
+                          EventRepository eventRepository) {
+        this.userRepository = userRepository;
+        this.userService = userService;
+        this.eventRepository = eventRepository;
+    }
 
-    /** Liste tous les utilisateurs (réservé aux administrateurs). */
+    /** Lists every user (admin only, see SecurityConfig). */
     @GetMapping("/all")
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
 
-    /** Inscrit un nouvel utilisateur. */
     @PostMapping
     public ResponseEntity<LoginResponse> register(@RequestBody User user) {
-        LoginResponse response = userService.registerUser(user);
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return new ResponseEntity<>(userService.registerUser(user), HttpStatus.CREATED);
     }
 
-    /** Authentifie un utilisateur et retourne un token JWT. */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-        String token = userService.loginUser(request.getEmail(), request.getPassword());
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        LoginResponse response = new LoginResponse(
-                token,
-                user.getId(),
-                user.getEmail(),
-                user.getRole()
-        );
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(userService.loginUser(request.getEmail(), request.getPassword()));
     }
 
-    /** Supprime le compte d'un utilisateur (réservé aux administrateurs). */
-    @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteUserByAdmin(@PathVariable Long id) {
-        User targetUser = userService.getUserById(id);
+    /** JWTs are stateless: the client simply discards its token. */
+    @PostMapping("/logout")
+    public ResponseEntity<String> logout() {
+        return ResponseEntity.ok("Logout successful");
+    }
 
-        if ("ADMIN".equals(targetUser.getRole())) {
+    @GetMapping("/{id}")
+    public ResponseEntity<User> getUser(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserById(id));
+    }
+
+    /** Updates a profile. Users can only edit their own profile, admins can edit any. */
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateUser(@PathVariable Long id,
+                                        @RequestBody User details,
+                                        Authentication authentication) {
+        User currentUser = (User) authentication.getPrincipal();
+
+        if (!currentUser.getId().equals(id) && !isAdmin(currentUser)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You can only update your own profile");
+        }
+        return ResponseEntity.ok(userService.updateUser(id, details));
+    }
+
+    /** Deletes a user account (admin only). Admin accounts cannot be deleted this way. */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> deleteUser(@PathVariable Long id) {
+        User target = userService.getUserById(id);
+
+        if (isAdmin(target)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("Cannot delete another admin account");
         }
@@ -81,83 +95,62 @@ public class UserController {
         return ResponseEntity.ok("User deleted by admin");
     }
 
-    /** Affiche le profil public d'un utilisateur spécifique. */
-    @GetMapping("/{id}")
-    public ResponseEntity<User> getUserProfile(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getUserById(id));
-    }
-
-    /** Met à jour le profil d'un utilisateur spécifique. */
-    @PutMapping("/{id}")
-    public ResponseEntity<User> updateProfile(@PathVariable Long id, @RequestBody User userDetails) {
-        return ResponseEntity.ok(userService.updateUser(id, userDetails));
-    }
-
-    /** Affiche le profil de l'utilisateur actuellement connecté. */
     @GetMapping("/profile")
     public ResponseEntity<User> getMyProfile(Authentication authentication) {
-        User currentUser = (User) authentication.getPrincipal();
-        return ResponseEntity.ok(userService.getUserById(currentUser.getId()));
+        return ResponseEntity.ok(userService.getUserById(currentUserId(authentication)));
     }
 
-    /** Met à jour le profil de l'utilisateur actuellement connecté. */
     @PutMapping("/profile")
-    public ResponseEntity<User> updateMyProfile(@RequestBody User userDetails, Authentication authentication) {
-        User currentUser = (User) authentication.getPrincipal();
-        return ResponseEntity.ok(userService.updateUser(currentUser.getId(), userDetails));
+    public ResponseEntity<User> updateMyProfile(@RequestBody User details, Authentication authentication) {
+        return ResponseEntity.ok(userService.updateUser(currentUserId(authentication), details));
     }
 
-    /** Ajoute un événement aux favoris de l'utilisateur. */
-    @PostMapping("/profile/like/{eventId}")
-    public ResponseEntity<String> likeEvent(@PathVariable Long eventId, Authentication authentication) {
-        User authUser = (User) authentication.getPrincipal();
-        User currentUser = userService.getUserById(authUser.getId());
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+    @DeleteMapping("/profile")
+    public ResponseEntity<String> deleteMyAccount(Authentication authentication) {
+        userService.deleteUserAccount(currentUserId(authentication));
+        return ResponseEntity.ok("Account deleted successfully");
+    }
 
-        currentUser.getFavorites().add(event);
-        userRepository.save(currentUser);
+    /** Returns the current user's events grouped as created / upcoming / past. */
+    @GetMapping("/profile/events")
+    public ResponseEntity<ProfileEventsResponse> getMyEvents(Authentication authentication) {
+        return ResponseEntity.ok(userService.getProfileEvents(currentUserId(authentication)));
+    }
+
+    @PostMapping("/profile/like/{eventId}")
+    public ResponseEntity<String> addFavorite(@PathVariable Long eventId, Authentication authentication) {
+        User user = userService.getUserById(currentUserId(authentication));
+        Event event = findEvent(eventId);
+
+        user.getFavorites().add(event);
+        userRepository.save(user);
 
         return ResponseEntity.ok("Event added to favorites");
     }
 
-    /** Retire un événement des favoris de l'utilisateur. */
     @DeleteMapping("/profile/like/{eventId}")
     public ResponseEntity<String> removeFavorite(@PathVariable Long eventId, Authentication authentication) {
-        User authUser = (User) authentication.getPrincipal();
-        User currentUser = userService.getUserById(authUser.getId());
+        User user = userService.getUserById(currentUserId(authentication));
+        Event event = findEvent(eventId);
 
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
-
-        if (!currentUser.getFavorites().contains(event)) {
+        if (!user.getFavorites().remove(event)) {
             throw new ResourceNotFoundException("Favorite not found");
         }
-
-        currentUser.getFavorites().remove(event);
-        userRepository.save(currentUser);
+        userRepository.save(user);
 
         return ResponseEntity.ok("Event removed from favorites");
     }
 
-    /** Supprime le compte de l'utilisateur connecté et toutes ses données. */
-    @DeleteMapping("/profile")
-    public ResponseEntity<String> deleteMyAccount(Authentication authentication) {
-        User currentUser = (User) authentication.getPrincipal();
-        userService.deleteUserAccount(currentUser.getId());
-        return ResponseEntity.ok("Account deleted successfully");
+    private Event findEvent(Long eventId) {
+        return eventRepository.findById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
     }
 
-    /** Déconnecte l'utilisateur. */
-    @PostMapping("/logout")
-    public ResponseEntity<String> logout() {
-        return ResponseEntity.ok("Logout successful");
+    private static Long currentUserId(Authentication authentication) {
+        return ((User) authentication.getPrincipal()).getId();
     }
 
-    /** Liste les événements (créés, passés, à venir) de l'utilisateur connecté. */
-    @GetMapping("/profile/events")
-    public ResponseEntity<ProfileEventsResponse> getMyEvents(Authentication authentication) {
-        User currentUser = (User) authentication.getPrincipal();
-        return ResponseEntity.ok(userService.getProfileEvents(currentUser.getId()));
+    private static boolean isAdmin(User user) {
+        return "ADMIN".equals(user.getRole());
     }
 }
