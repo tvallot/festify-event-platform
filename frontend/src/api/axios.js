@@ -7,25 +7,18 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-    let token = store.getState().user.token
-    if (!token) {
-        const stored = JSON.parse(localStorage.getItem('festify_user'))
-        token = stored?.token
-    }
-    if (token) {
+    const token = store.getState().user.token
+    if (token && !config.headers.Authorization) {
         config.headers.Authorization = `Bearer ${token}`
     }
     return config
 })
 
+// An expired or invalid token ends the session
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        const status = error.response?.status
-        const url = error.config?.url || ''
-        const hasToken = store.getState().user.token
-
-        if (hasToken && (status === 401 || (status === 403 && url.includes('/users/profile')))) {
+        if (error.response?.status === 401 && store.getState().user.token) {
             store.dispatch(logout())
         }
         return Promise.reject(error)

@@ -1,43 +1,41 @@
-import './App.css'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { FavoritesProvider } from './contexts/FavoritesContext'
-import Header from './Header/Header'
-import Footer from './Footer/Footer'
-import Accueil from './Accueil/Accueil'
-import Login from './Login/Login'
-import Signup from './Signup/Signup'
-import EventsList from './EventsList/EventsList'
-import EventDetail from './EventDetail/EventDetail'
-import CreateEvent from './CreateEvent/CreateEvent'
-import Profil from './Profil/Profil'
-import Settings from './Settings/Settings'
-import EditEvent from './EditEvent/EditEvent'
-import NotFound from './NotFound/NotFound'
-import Admin from './Admin/Admin'
-
+import Header from './components/Header'
+import Footer from './components/Footer'
+import Home from './pages/Home'
+import Login from './pages/Login'
+import Signup from './pages/Signup'
+import EventsList from './pages/EventsList'
+import EventDetail from './pages/EventDetail'
+import CreateEvent from './pages/CreateEvent'
+import EditEvent from './pages/EditEvent'
+import Profile from './pages/Profile'
+import Settings from './pages/Settings'
+import Admin from './pages/Admin'
+import NotFound from './pages/NotFound'
 
 function App() {
-	return (
-		<FavoritesProvider>
-			<Router>
-				<Header />
-				<Routes>
-					<Route path="/" element={<Accueil />} />
-					<Route path="/create" element={<CreateEvent />} />
-					<Route path="/profil" element={<Profil />} />
-					<Route path="/settings" element={<Settings />} />
-					<Route path="/events" element={<EventsList />} />
-					<Route path="/events/:id" element={<EventDetail />} />
-					<Route path="/events/:id/edit" element={<EditEvent />} />
-					<Route path="/login" element={<Login />} />
-					<Route path="/signup" element={<Signup />} />
-					<Route path="/admin" element={<Admin />} />
-					<Route path="*" element={<NotFound />} />
-				</Routes>
-				<Footer />
-			</Router>
-		</FavoritesProvider>
-	)
+    return (
+        <FavoritesProvider>
+            <BrowserRouter>
+                <Header />
+                <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/events" element={<EventsList />} />
+                    <Route path="/events/new" element={<CreateEvent />} />
+                    <Route path="/events/:id" element={<EventDetail />} />
+                    <Route path="/events/:id/edit" element={<EditEvent />} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/signup" element={<Signup />} />
+                    <Route path="/admin" element={<Admin />} />
+                    <Route path="*" element={<NotFound />} />
+                </Routes>
+                <Footer />
+            </BrowserRouter>
+        </FavoritesProvider>
+    )
 }
 
 export default App

@@ -41,10 +41,12 @@ public class EventIntegrationTest extends BaseIntegrationTest {
     void get_event_by_id_should_be_public() throws Exception {
         String token = registerAndGetToken("Get", "Event", "get.event@test.com", "123456");
         String eventId = createEventAndGetId(token);
+        flushAndClear();
 
         mockMvc.perform(get("/api/events/" + eventId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("Test Event"));
+                .andExpect(jsonPath("$.title").value("Test Event"))
+                .andExpect(jsonPath("$.participantCount").value(1));
     }
 
     @Test

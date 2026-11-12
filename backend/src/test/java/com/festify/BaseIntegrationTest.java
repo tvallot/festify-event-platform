@@ -14,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.festify.models.User;
 import com.festify.repositories.UserRepository;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -25,6 +28,18 @@ public abstract class BaseIntegrationTest {
 
     @Autowired
     protected UserRepository userRepository;
+
+    @PersistenceContext
+    protected EntityManager entityManager;
+
+    /**
+     * Tests run in a single transaction, so entities stay cached between requests.
+     * Call this before reading values the database computes (e.g. @Formula fields).
+     */
+    protected void flushAndClear() {
+        entityManager.flush();
+        entityManager.clear();
+    }
 
     /** Roles cannot be set through the API, so test admins are promoted directly in the database. */
     protected String registerAdminAndGetToken(String email) throws Exception {

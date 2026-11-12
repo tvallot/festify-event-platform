@@ -9,33 +9,16 @@ export const fetchEvents = (filters = {}) => {
     return api.get('/events', { params })
 }
 
-export const fetchEventById = async (id) => {
-    const res = await api.get('/events')
-    const event = res.data.find((e) => e.id === Number(id))
-    if (!event) throw new Error('Event not found')
-    return { data: event }
-}
+export const fetchEventById = (id) => api.get(`/events/${id}`)
 
-export const createEvent = (eventData) => {
-    return api.post('/events', eventData)
-}
+export const createEvent = (eventData) => api.post('/events', eventData)
 
-export const updateEvent = (id, eventData) => {
-    return api.put(`/events/${id}`, eventData)
-}
+export const updateEvent = (id, eventData) => api.put(`/events/${id}`, eventData)
 
-export const deleteEvent = (id) => {
-    return api.delete(`/events/${id}`)
-}
+export const deleteEvent = (id) => api.delete(`/events/${id}`)
 
-export const joinEvent = (eventId) => {
-    return api.post(`/events/${eventId}/join`)
-}
+export const joinEvent = (eventId) => api.post(`/events/${eventId}/join`)
 
-export const leaveEvent = (eventId) => {
-    return api.delete(`/events/${eventId}/join`)
-}
+export const leaveEvent = (eventId) => api.delete(`/events/${eventId}/join`)
 
-export const fetchParticipants = (eventId) => {
-    return api.get(`/events/${eventId}/participants`)
-}
+export const fetchParticipants = (eventId) => api.get(`/events/${eventId}/participants`)

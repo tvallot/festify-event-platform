@@ -145,7 +145,8 @@ public class ParticipationIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(get("/api/events/" + eventId + "/participants"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].user.email").value("creator.public@test.com"))
+                .andExpect(jsonPath("$[0].user.firstName").value("Creator"))
+                .andExpect(jsonPath("$[0].user.email").doesNotExist())
                 .andExpect(jsonPath("$[0].user.passwordHash").doesNotExist());
     }
 

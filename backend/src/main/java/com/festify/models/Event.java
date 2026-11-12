@@ -2,6 +2,10 @@ package com.festify.models;
 
 import java.time.LocalDate;
 
+import org.hibernate.annotations.Formula;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -11,11 +15,16 @@ import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "events")
-public class Event
-{
+public class Event {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** Computed by the database so clients don't need one request per event to count participants. */
+    @Formula("(SELECT COUNT(*) FROM participations p WHERE p.event_id = id)")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Integer participantCount;
 
     private String title;
 
@@ -37,6 +46,10 @@ public class Event
 
     public Long getId() {
         return id;
+    }
+
+    public Integer getParticipantCount() {
+        return participantCount;
     }
 
     public void setId(Long id) {

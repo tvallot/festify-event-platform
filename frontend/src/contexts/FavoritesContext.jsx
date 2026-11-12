@@ -1,66 +1,49 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import { likeEvent, unlikeEvent, fetchMyProfile } from '../api/users'
+import { selectIsLoggedIn } from '../redux/userSlice'
+import { FavoritesContext } from './useFavorites'
 
-const FavoritesContext = createContext()
-
-export function useFavorites() {
-    const context = useContext(FavoritesContext)
-    if (!context) {
-        throw new Error('useFavorites must be used within FavoritesProvider')
-    }
-    return context
-}
-
+/** Keeps the ids of the user's favorite events in sync with the API (optimistic updates). */
 export function FavoritesProvider({ children }) {
-    const { userId, token } = useSelector((state) => state.user)
-    const isLoggedIn = userId > 0 && token
+    const isLoggedIn = useSelector(selectIsLoggedIn)
+    const userId = useSelector((state) => state.user.userId)
 
-    const [favorites, setFavorites] = useState([])
+    // Ids are stored with the user they belong to, so a logout or account switch never shows stale favorites
+    const [loaded, setLoaded] = useState({ userId: null, ids: [] })
+    const favorites = useMemo(
+        () => (isLoggedIn && loaded.userId === userId ? loaded.ids : []),
+        [isLoggedIn, loaded, userId]
+    )
 
     useEffect(() => {
-        if (!isLoggedIn) {
-            setFavorites([])
-            return
-        }
-
+        if (!isLoggedIn) return
         fetchMyProfile()
-            .then((res) => {
-                const favIds = (res.data.favorites || []).map((e) => e.id)
-                setFavorites(favIds)
-            })
-            .catch((error) => {
-
-            })
+            .then((res) => setLoaded({ userId, ids: (res.data.favorites || []).map((e) => e.id) }))
+            .catch(() => setLoaded({ userId, ids: [] }))
     }, [isLoggedIn, userId])
 
     const toggleFavorite = useCallback(async (eventId) => {
         if (!isLoggedIn) return
 
-        const alreadyFav = favorites.includes(eventId)
+        const wasFavorite = favorites.includes(eventId)
+        const apply = (add) => setLoaded((prev) => ({
+            userId,
+            ids: add ? [...prev.ids, eventId] : prev.ids.filter((id) => id !== eventId),
+        }))
 
-        setFavorites((prev) =>
-            alreadyFav ? prev.filter((id) => id !== eventId) : [...prev, eventId]
-        )
-
+        apply(!wasFavorite)
         try {
-            if (alreadyFav) {
-                await unlikeEvent(eventId)
-            } else {
-                await likeEvent(eventId)
-            }
+            await (wasFavorite ? unlikeEvent(eventId) : likeEvent(eventId))
         } catch {
-            setFavorites((prev) =>
-                alreadyFav ? [...prev, eventId] : prev.filter((id) => id !== eventId)
-            )
+            apply(wasFavorite)
         }
-    }, [isLoggedIn, favorites])
+    }, [isLoggedIn, userId, favorites])
 
-    const isFavorite = (eventId) => favorites.includes(eventId)
-    const getFavoritesCount = () => favorites.length
+    const isFavorite = useCallback((eventId) => favorites.includes(eventId), [favorites])
 
     return (
-        <FavoritesContext.Provider value={{ favorites, toggleFavorite, isFavorite, getFavoritesCount }}>
+        <FavoritesContext.Provider value={{ favorites, toggleFavorite, isFavorite }}>
             {children}
         </FavoritesContext.Provider>
     )

@@ -1,5 +1,7 @@
 package com.festify.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -13,8 +15,10 @@ public class Participation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** The participant list is public: only expose what is needed to display someone. */
     @ManyToOne
     @JoinColumn(name = "user_id")
+    @JsonIgnoreProperties({"email", "favorites", "bio", "location", "role"})
     private User user;
 
     @ManyToOne
