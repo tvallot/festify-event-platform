@@ -1,0 +1,6 @@
+# ignore IDE files
+.idea/
+.vscode/
+
+# ignore environment variables
+.env

@@ -1,0 +1,116 @@
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  SERVER_USER: "gitlabci"
+  SERVER_IP: "192.168.75.101"
+
+backend-build:
+  stage: build
+  image: maven:3.9.6-eclipse-temurin-21
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - backend/**/*
+        - .gitlab-ci.yml
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - backend/backend/festify/.m2/
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=backend/backend/festify/.m2/repository"
+  script:
+    - cd backend/backend/festify
+    - chmod +x mvnw
+    - ./mvnw -s settings.xml clean package -DskipTests
+  artifacts:
+    paths:
+      - backend/backend/festify/target/*.jar
+      - backend/backend/festify/target/classes/ 
+
+frontend-build:
+  stage: build
+  image: node:22
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+  script:
+    - cd frontend
+    - npm install
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist
+
+sonarqube:
+  stage: test
+  only:
+    - main
+  image: maven:3.9.6-eclipse-temurin-21
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - backend/backend/festify/.m2/
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=backend/backend/festify/.m2/repository"
+  script:
+    - apt-get update && apt-get install -y unzip curl
+    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    - apt-get install -y nodejs
+    - cd backend/backend/festify
+    - chmod +x mvnw
+    - ./mvnw -s settings.xml clean verify jacoco:report
+    - cd ../../..
+    - curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.2.1.4610-linux-x64.zip
+    - unzip -q sonar-scanner.zip
+    - ./sonar-scanner-6.2.1.4610-linux-x64/bin/sonar-scanner
+        -Dsonar.projectKey=Festify
+        -Dsonar.sources=backend/backend/festify/src/main
+        -Dsonar.tests=backend/backend/festify/src/test
+        -Dsonar.java.binaries=backend/backend/festify/target/classes
+        -Dsonar.coverage.jacoco.xmlReportPaths=backend/backend/festify/target/site/jacoco/jacoco.xml
+        -Dsonar.host.url=$SONAR_HOST_URL
+        -Dsonar.token=$SONAR_TOKEN
+
+backend-deploy:
+  stage: deploy
+  image: alpine:latest
+  dependencies:
+    - backend-build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - backend/**/*
+        - .gitlab-ci.yml
+  before_script:
+    - apk add openssh-client
+    - chmod 600 "$SSH_PRIVATE_KEY"
+  script:
+    - scp -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" backend/backend/festify/target/*.jar $SERVER_USER@$SERVER_IP:/home/$SERVER_USER/app.jar
+    - scp -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" backend/backend/festify/Dockerfile $SERVER_USER@$SERVER_IP:/home/$SERVER_USER/Dockerfile
+    - scp -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" backend/docker-compose.yml $SERVER_USER@$SERVER_IP:/home/$SERVER_USER/docker-compose.yml
+    - ssh -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" $SERVER_USER@$SERVER_IP "sudo cp /home/$SERVER_USER/app.jar /var/www/app/meetup/backend/app.jar"
+    - ssh -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" $SERVER_USER@$SERVER_IP "sudo cp /home/$SERVER_USER/Dockerfile /var/www/app/meetup/backend/Dockerfile"
+    - ssh -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" $SERVER_USER@$SERVER_IP "sudo cp /home/$SERVER_USER/docker-compose.yml /var/www/app/meetup/backend/docker-compose.yml"
+    - ssh -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" $SERVER_USER@$SERVER_IP "cd /var/www/app/meetup/backend && sudo docker-compose down && sudo docker-compose up -d --build"
+
+frontend-deploy:
+  stage: deploy
+  image: alpine:latest
+  dependencies:
+    - frontend-build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"  
+      changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+  before_script:
+    - apk add openssh-client rsync
+    - chmod 600 "$SSH_PRIVATE_KEY"
+  script:
+    - rsync -avz --delete --chmod=D755,F644 -e "ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY" frontend/dist/ $SERVER_USER@$SERVER_IP:/var/www/app/meetup/dist/
+    - scp -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" frontend/nginx.conf $SERVER_USER@$SERVER_IP:/var/www/app/meetup/dist/nginx.conf
