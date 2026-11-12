@@ -7,9 +7,3 @@
 *.iml
 .DS_Store
 
-# AI assistants
-.claude/
-.codex/
-.cursor/
-CLAUDE.md
-AGENTS.md
